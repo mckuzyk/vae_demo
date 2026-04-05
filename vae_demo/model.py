@@ -15,7 +15,7 @@ class SpiralEncoder(nn.Module):
     the mean and log variance per data point x.
     """
 
-    def __init__(self, latent_dims=2, hidden_dim=32, hidden_layers=1):
+    def __init__(self, latent_dims=1, hidden_dim=32, hidden_layers=1):
         super().__init__()
         self.latent_dims = latent_dims
         self.hidden_dim = hidden_dim
@@ -54,7 +54,7 @@ class SpiralDecoder(nn.Module):
     model simply outputs mu_theta(z) due to our assumptions.
     """
 
-    def __init__(self, latent_dims=2, hidden_dim=32, hidden_layers=1):
+    def __init__(self, latent_dims=1, hidden_dim=32, hidden_layers=1):
         super().__init__()
         self.latent_dims = latent_dims
         self.hidden_dim = hidden_dim
@@ -92,24 +92,38 @@ def KL_loss(mu, logsigma):
     return -per_datapoint.mean()
 
 
-def train():
-    dset = SpiralDataset(np.linspace(0.1, 1, 100), spread=0.01, omega=4 * np.pi)
-    data_loader = DataLoader(dset, shuffle=True, batch_size=100)
-    encoder = SpiralEncoder(latent_dims=1, hidden_dim=64, hidden_layers=2)
-    decoder = SpiralDecoder(latent_dims=1, hidden_dim=64, hidden_layers=2)
-    lr_enc = 1e-3
-    lr_dec = 1e-3
+def train(cfg):
+    #    dset = SpiralDataset(np.linspace(0.1, 1, 100), spread=0.01, omega=4 * np.pi)
+    dset = SpiralDataset(
+        np.linspace(cfg.t_start, cfg.t_stop, cfg.t_steps),
+        omega=cfg.omega,
+        rdot=cfg.rdot,
+        spread=cfg.spread,
+    )
+    #    data_loader = DataLoader(dset, shuffle=True, batch_size=100)
+    data_loader = DataLoader(dset, shuffle=cfg.shuffle_batch, batch_size=cfg.batch_size)
+    encoder = SpiralEncoder(
+        latent_dims=cfg.latent_dims,
+        hidden_dim=cfg.encoder_hidden_dim,
+        hidden_layers=cfg.encoder_hidden_layers,
+    )
+    decoder = SpiralDecoder(
+        latent_dims=cfg.latent_dims,
+        hidden_dim=cfg.decoder_hidden_dim,
+        hidden_layers=cfg.decoder_hidden_layers,
+    )
+    lr_enc = cfg.lr_enc
+    lr_dec = cfg.lr_dec
     optimizer_enc = torch.optim.Adam(encoder.parameters(), lr=lr_enc)
     optimizer_dec = torch.optim.Adam(decoder.parameters(), lr=lr_dec)
 
-    epochs = 50000
+    epochs = cfg.epochs
 
     kl_loss_hist = []
     re_loss_hist = []
     loss_hist = []
 
     for epoch in range(epochs):
-        kl_weight = 1.0
         for batch in data_loader:
             optimizer_enc.zero_grad()
             optimizer_dec.zero_grad()
@@ -118,8 +132,8 @@ def train():
             z = reparam(mu, logsigma)
             decoded = decoder(z)
             kl_loss = KL_loss(mu, logsigma)
-            re_loss = reconstruction_loss(batch, decoded, sigma=0.01)
-            loss = kl_weight * kl_loss + re_loss
+            re_loss = reconstruction_loss(batch, decoded, sigma=cfg.decoder_sigma)
+            loss = kl_loss + re_loss
             loss.backward()
             optimizer_enc.step()
             optimizer_dec.step()
@@ -133,19 +147,28 @@ def train():
                 f"Loss (KL): {kl_loss.item()} | "
                 f"Loss (Re): {re_loss.item()} | "
             )
-    return encoder, decoder, kl_loss_hist, re_loss_hist, loss_hist
+    return encoder, decoder, kl_loss_hist, re_loss_hist, loss_hist, dset
 
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
+    from vae_demo.config import VAEConfig
 
-    encoder, decoder, kl_loss_hist, re_loss_hist, loss_hist = train()
-    dset = SpiralDataset(np.linspace(0.1, 1, 100), spread=0.01, omega=4 * np.pi)
+    rng = np.random.default_rng(42)
+
+    cfg = VAEConfig(decoder_sigma=0.1, spread=0.1)
+
+    encoder, decoder, kl_loss_hist, re_loss_hist, loss_hist, dset = train(cfg)
     input = dset.data
     with torch.no_grad():
         mu, logsigma = encoder(input)
         z = reparam(mu, logsigma)
         output = decoder(z)
+
+    # Generate new data, 1 new point for each input point
+    generated_points = output.numpy() + rng.normal(
+        scale=cfg.decoder_sigma, size=output.shape
+    )
 
     plt.figure()
     plt.plot(kl_loss_hist)
@@ -159,6 +182,12 @@ if __name__ == "__main__":
     plt.figure()
     plt.plot(dset[:, 0], dset[:, 1], ".")
     plt.plot(output[:, 0], output[:, 1], "x", color="red", alpha=0.7)
+
+    plt.figure()
+    plt.plot(dset[:, 0], dset[:, 1], ".")
+    plt.plot(
+        generated_points[:, 0], generated_points[:, 1], "x", color="red", alpha=0.7
+    )
 
     plt.figure()
     plt.plot(dset[:, 0], dset[:, 1])

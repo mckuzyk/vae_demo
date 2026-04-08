@@ -31,6 +31,9 @@ class SpiralDataset(Dataset):
     def __init__(self, ts, omega=2 * np.pi, rdot=1, spread=0.01):
         s = Spiral(omega, rdot, spread)
         x, y = s(ts)
+        self.omega = omega
+        self.rdot = rdot
+        self.spread = spread
         self.ts = torch.from_numpy(ts).float().reshape(-1, 1)
         self.x = torch.from_numpy(x).float().reshape(-1, 1)
         self.y = torch.from_numpy(y).float().reshape(-1, 1)

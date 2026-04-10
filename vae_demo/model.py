@@ -28,8 +28,8 @@ class SpiralEncoder(nn.Module):
         # mlp_sigma predicts the log variance, not the variance or std
         self.linear_sigma = nn.Linear(self.hidden_dim, self.latent_dims)
 
-    def forward(self, input):
-        h = self.h(input)
+    def forward(self, x):
+        h = self.h(x)
         mu = self.linear_mu(h)
         sigma = self.linear_sigma(h)
         return mu, sigma
@@ -93,14 +93,14 @@ def KL_loss(mu, logsigma):
 
 
 def train(cfg):
-    #    dset = SpiralDataset(np.linspace(0.1, 1, 100), spread=0.01, omega=4 * np.pi)
     dset = SpiralDataset(
-        np.linspace(cfg.t_start, cfg.t_stop, cfg.t_steps),
+        # sqrt bunches up the t values closer to 1, where the sprial
+        # would normally get more spread out (larger R, fixed angular velocity)
+        np.sqrt(np.linspace(cfg.t_start, cfg.t_stop, cfg.t_steps)),
         omega=cfg.omega,
         rdot=cfg.rdot,
         spread=cfg.spread,
     )
-    #    data_loader = DataLoader(dset, shuffle=True, batch_size=100)
     data_loader = DataLoader(dset, shuffle=cfg.shuffle_batch, batch_size=cfg.batch_size)
     encoder = SpiralEncoder(
         latent_dims=cfg.latent_dims,
@@ -137,9 +137,9 @@ def train(cfg):
             loss.backward()
             optimizer_enc.step()
             optimizer_dec.step()
-            kl_loss_hist.append(kl_loss.item())
-            re_loss_hist.append(re_loss.item())
-            loss_hist.append(loss.item())
+        kl_loss_hist.append(kl_loss.item())
+        re_loss_hist.append(re_loss.item())
+        loss_hist.append(loss.item())
         if epoch % 100 == 0:
             print(
                 f"Epoch: {epoch} | "
@@ -148,62 +148,3 @@ def train(cfg):
                 f"Loss (Re): {re_loss.item()} | "
             )
     return encoder, decoder, kl_loss_hist, re_loss_hist, loss_hist, dset
-
-
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    from vae_demo.config import VAEConfig
-
-    rng = np.random.default_rng(42)
-
-    cfg = VAEConfig(decoder_sigma=0.1, spread=0.1)
-
-    encoder, decoder, kl_loss_hist, re_loss_hist, loss_hist, dset = train(cfg)
-    input = dset.data
-    with torch.no_grad():
-        mu, logsigma = encoder(input)
-        z = reparam(mu, logsigma)
-        output = decoder(z)
-
-    # Generate new data, 1 new point for each input point
-    generated_points = output.numpy() + rng.normal(
-        scale=cfg.decoder_sigma, size=output.shape
-    )
-
-    plt.figure()
-    plt.plot(kl_loss_hist)
-    plt.plot(re_loss_hist)
-    plt.yscale("log")
-
-    plt.figure()
-    plt.plot(loss_hist)
-    plt.yscale("log")
-
-    plt.figure()
-    plt.plot(dset[:, 0], dset[:, 1], ".")
-    plt.plot(output[:, 0], output[:, 1], "x", color="red", alpha=0.7)
-
-    plt.figure()
-    plt.plot(dset[:, 0], dset[:, 1], ".")
-    plt.plot(
-        generated_points[:, 0], generated_points[:, 1], "x", color="red", alpha=0.7
-    )
-
-    plt.figure()
-    plt.plot(dset[:, 0], dset[:, 1])
-    plt.plot(output[:, 0], output[:, 1], "--", color="red", alpha=0.7)
-
-    with torch.no_grad():
-        mu, logsigma = encoder(dset.data)
-
-    plt.figure()
-    plt.scatter(
-        mu.numpy(),
-        np.zeros_like(mu.numpy()),
-        c=np.linspace(0.1, 1, 100),
-        cmap="viridis",
-    )
-    plt.colorbar(label="t")
-    plt.title("Latent space")
-
-    plt.show()

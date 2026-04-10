@@ -44,15 +44,3 @@ class SpiralDataset(Dataset):
 
     def __len__(self):
         return self.ts.shape[0]
-
-
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-
-    s = Spiral()
-
-    ts = np.linspace(0, 2, 200)
-    x, y = s(ts)
-
-    plt.plot(x, y, ".")
-    plt.show()

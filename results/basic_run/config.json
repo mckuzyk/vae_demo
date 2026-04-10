@@ -1,0 +1,21 @@
+{
+  "latent_dims": 1,
+  "encoder_hidden_dim": 32,
+  "encoder_hidden_layers": 1,
+  "decoder_hidden_dim": 32,
+  "decoder_hidden_layers": 1,
+  "decoder_sigma": 0.2,
+  "epochs": 20000,
+  "lr_enc": 0.001,
+  "lr_dec": 0.001,
+  "batch_size": 100,
+  "shuffle_batch": true,
+  "steplr_step_size": 30000,
+  "steplr_gamma": 0.1,
+  "omega": 8.79645943005142,
+  "rdot": 2.5,
+  "spread": 0.2,
+  "t_start": 0.01,
+  "t_stop": 1.0,
+  "t_steps": 200
+}
